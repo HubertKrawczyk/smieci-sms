@@ -1,3 +1,4 @@
 Project in progress.
 
-Colelcts users location information. On the day of garbage collection, sends SMS to user.
+Collects users location information. 
+Then, on the day of garbage collection (or the day before), sends an SMS to user.
