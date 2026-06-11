@@ -1,34 +1,127 @@
 package scheduler
 
 import (
-    "time"
+	"context"
+	"log"
+	"time"
 
-    "smieci-sms/internal/repository"
-    "smieci-sms/internal/service"
+	"smieci-sms/internal/model"
+	"smieci-sms/internal/repository"
+	"smieci-sms/internal/service"
 )
 
 type Scheduler struct {
-    userRepo       repository.UserRepository
-    garbageService service.GarbageService
-    smsService     service.SMSService
+	userRepo       repository.UserRepository
+	garbageService service.GarbageService
+	smsService     service.SMSService
 }
 
 func NewScheduler(userRepo repository.UserRepository, garbageService service.GarbageService, smsService service.SMSService) *Scheduler {
-    return &Scheduler{userRepo: userRepo, garbageService: garbageService, smsService: smsService}
+	return &Scheduler{userRepo: userRepo, garbageService: garbageService, smsService: smsService}
 }
 
 func (s *Scheduler) ScheduleDailyTasks() {
-    go func() {
-        ticker := time.NewTicker(24 * time.Hour)
-        defer ticker.Stop()
+	go func() {
+		// Run once immediately on startup so you don't wait 24h to test it
+		s.runDailyJob()
 
-        for {
-            s.runDailyJob()
-            <-ticker.C
-        }
-    }()
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			s.runDailyJob()
+		}
+	}()
 }
 
 func (s *Scheduler) runDailyJob() {
-    // TODO: fetch schedule from city website, compare with saved users, send SMS when collection occurs
+	log.Println("=== Starting Daily Scheduler Job ===")
+
+	// Create a base context with a maximum timeout of 10 minutes for the whole job
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// 1. Fetch location IDs that haven't been updated in 3+ days (or have no schedule yet)
+	outdatedIDs, err := s.userRepo.GetOutdatedLocationIDs(ctx)
+	if err != nil {
+		log.Printf("Scheduler error: failed to fetch outdated IDs: %v", err)
+		return
+	}
+
+	if len(outdatedIDs) == 0 {
+		log.Println("Scheduler: All database cache schedules are up to date. No scraping needed.")
+	} else {
+		log.Printf("Scheduler: Found %d outdated locations. Initializing scraper sync...", len(outdatedIDs))
+
+		// 2. Fetch fresh data from the Warsaw website for those IDs
+		freshSchedules, err := s.garbageService.FetchSchedulesForLocations(ctx, outdatedIDs)
+		if err != nil {
+			log.Printf("Scheduler error: scraping process failed: %v", err)
+			return
+		}
+
+		// 3. Upsert the fresh data back into PostgreSQL
+		if len(freshSchedules) > 0 {
+			err = s.userRepo.SaveGarbageSchedules(ctx, freshSchedules)
+			if err != nil {
+				log.Printf("Scheduler error: failed to save fresh schedules to DB: %v", err)
+				return
+			}
+			log.Printf("Scheduler: Successfully updated %d schedules in DB.", len(freshSchedules))
+		}
+	}
+
+	// 4. SMS Processing Layer
+	log.Println("Scheduler: Checking schedules to determine tomorrow's SMS notifications...")
+	s.processAndSendSMSNotifications(ctx)
+
+	log.Println("=== Daily Scheduler Job Finished ===")
+}
+
+func (s *Scheduler) processAndSendSMSNotifications(ctx context.Context) {
+
+}
+
+// Helper logic to build the warning message if a date hits tomorrow
+func (s *Scheduler) checkPickupTomorrow(sched *model.GarbageSchedule, tomorrow time.Time) string {
+	if sched == nil {
+		return ""
+	}
+
+	targetDate := tomorrow.Format("2006-01-02")
+	var fractions []string
+
+	checkDate := func(t *time.Time, name string) {
+		if t != nil && t.Format("2006-01-02") == targetDate {
+			fractions = append(fractions, name)
+		}
+	}
+
+	checkDate(sched.DateZmieszane, "zmieszane")
+	checkDate(sched.DatePapier, "papier")
+	checkDate(sched.DatePlastik, "plastik i metale")
+	checkDate(sched.DateSzklo, "szkło")
+	checkDate(sched.DateBio, "bio")
+	checkDate(sched.DateZielone, "zielone")
+	checkDate(sched.DateBioRestauracyjne, "bio restauracyjne")
+	checkDate(sched.DateGabaryty, "gabaryty")
+
+	if len(fractions) == 0 {
+		return ""
+	}
+
+	// Returns comma separated string if multiple pickups align on the same day
+	// e.g., "bio, plastik i metale"
+	return joinStrings(fractions, ", ")
+}
+
+func joinStrings(elements []string, sep string) string {
+	if len(elements) == 0 {
+		return ""
+	}
+	res := elements[0]
+	for _, s := range elements[1:] {
+		res += sep + s
+	}
+	return res
 }

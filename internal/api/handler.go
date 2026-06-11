@@ -1,53 +1,59 @@
 package api
 
 import (
-    "encoding/json"
-    "net/http"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
 
-    "smieci-sms/internal/model"
-    "smieci-sms/internal/repository"
+	"smieci-sms/internal/model"
+	"smieci-sms/internal/repository"
 )
 
 type Handler struct {
-    repo repository.UserRepository
+	repo repository.UserRepository
 }
 
 func NewHandler(repo repository.UserRepository) *Handler {
-    return &Handler{repo: repo}
+	return &Handler{repo: repo}
 }
 
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (h *Handler) CreateUserLocation(w http.ResponseWriter, r *http.Request) {
-    var payload model.UserLocationRequest
-    if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-        http.Error(w, "invalid request body", http.StatusBadRequest)
-        return
-    }
+	var payload model.UserLocationRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
 
-    user := model.User{
-        Name:  payload.Name,
-        Phone: payload.Phone,
-    }
+	user := model.UserLocation{
+		Name:        payload.Name,
+		Phone:       payload.Phone,
+		LocationID:  payload.LocationID,
+		AddressName: payload.AddressName,
+	}
+	fmt.Printf("User struct: %+v\n", user)
 
-    if err := h.repo.SaveUser(r.Context(), user, payload.Address); err != nil {
-        http.Error(w, "failed to save user", http.StatusInternalServerError)
-        return
-    }
+	if err := h.repo.SaveUserLocation(r.Context(), user); err != nil {
+		log.Printf("ERROR: SaveUserLocation failed: %v", err)
+		http.Error(w, "failed to save user", http.StatusInternalServerError)
+		return
+	}
 
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(user)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(user)
 }
 
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
-    users, err := h.repo.ListUsers(r.Context())
-    if err != nil {
-        http.Error(w, "failed to list users", http.StatusInternalServerError)
-        return
-    }
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(users)
+	users, err := h.repo.ListUsers(r.Context())
+	if err != nil {
+		http.Error(w, "failed to list users", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
 }
