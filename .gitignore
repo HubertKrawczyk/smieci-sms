@@ -1,0 +1,18 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build output
+bin/
+
+# Go modules
+vendor/
+
+# Editor
+.vscode/
+.DS_Store
+
+# Database file
+*.db
