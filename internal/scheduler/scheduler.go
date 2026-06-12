@@ -41,7 +41,6 @@ func (s *Scheduler) runDailyJob() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	// 1. Fetch location IDs that haven't been updated in 3+ days (or have no schedule yet)
 	outdatedIDs, err := s.userRepo.GetOutdatedLocationIDs(ctx)
 	if err != nil {
 		log.Printf("Scheduler error: failed to fetch outdated IDs: %v", err)
@@ -53,14 +52,12 @@ func (s *Scheduler) runDailyJob() {
 	} else {
 		log.Printf("Scheduler: Found %d outdated locations. Initializing scraper sync...", len(outdatedIDs))
 
-		// 2. Fetch fresh data from the Warsaw website for those IDs
 		freshSchedules, err := s.garbageService.FetchSchedulesForLocations(ctx, outdatedIDs)
 		if err != nil {
 			log.Printf("Scheduler error: scraping process failed: %v", err)
 			return
 		}
 
-		// 3. Upsert the fresh data back into PostgreSQL
 		if len(freshSchedules) > 0 {
 			err = s.userRepo.SaveGarbageSchedules(ctx, freshSchedules)
 			if err != nil {
@@ -71,7 +68,6 @@ func (s *Scheduler) runDailyJob() {
 		}
 	}
 
-	// 4. SMS Processing Layer
 	log.Println("Scheduler: Checking schedules to determine tomorrow's SMS notifications...")
 	s.processAndSendSMSNotifications(ctx)
 

@@ -1,5 +1,5 @@
 CREATE TABLE garbage_schedules (
-    location_id INTEGER PRIMARY KEY, -- Unique building ID from Warsaw system
+    location_id INTEGER PRIMARY KEY, -- Unique building ID from system
     date_zmieszane DATE,
     date_papier DATE,
     date_plastik DATE,

@@ -29,7 +29,7 @@ func main() {
     garbageService := service.NewGarbageService(cfg.CityGarbageURL)
     appScheduler := scheduler.NewScheduler(userRepo, garbageService, smsService)
 
-    router := api.NewRouter(userRepo)
+    router := api.NewRouter(userRepo, garbageService)
     appScheduler.ScheduleDailyTasks()
 
     srv := &http.Server{
