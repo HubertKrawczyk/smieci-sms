@@ -8,3 +8,9 @@ CREATE TABLE user_locations (
 );
 
 CREATE INDEX idx_user_locations_location_id ON user_locations(location_id);
+
+CREATE TABLE user_notifications (
+    user_location_id INT REFERENCES user_locations(id) ON DELETE CASCADE,
+    notification_time VARCHAR(50) NOT NULL,
+    PRIMARY KEY (user_location_id, notification_time)
+);

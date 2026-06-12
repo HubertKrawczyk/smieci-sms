@@ -11,12 +11,13 @@ package model
 // }
 
 type UserLocation struct {
-	ID          int64  `json:"id"`
-	ChatID      int64  `json:"chat_id"`
-	Name        string `json:"name"`
-	Phone       string `json:"phone"`
-	LocationID  string `json:"location_id"`
-	AddressName string `json:"address_name"`
+	ID                   int64    `json:"id"`
+	ChatID               int64    `json:"chat_id"`
+	Name                 string   `json:"name"`
+	Phone                string   `json:"phone"`
+	LocationID           string   `json:"location_id"`
+	AddressName          string   `json:"address_name"`
+	NotificationSettings []string `json:"notification_settings"`
 }
 
 type UserLocationRequest struct {

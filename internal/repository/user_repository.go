@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -59,26 +58,38 @@ func (r *userRepository) SaveUserLocation(ctx context.Context, user model.UserLo
 	logSQL := fmt.Sprintf("INSERT INTO user_locations (chat_id, location_id, name, phone, address_name) VALUES (%d,'%s','%s','%s',%s)", user.ChatID, user.LocationID, escapedName, escapedPhone, addrForLog)
 	fmt.Println(logSQL)
 
-	// execute parameterized query using database/sql to remain DB-agnostic
-	query := `INSERT INTO user_locations (chat_id, location_id, name, phone, address_name) VALUES ($1, $2, $3, $4, $5)`
-	result, err := r.db.Conn.ExecContext(ctx, query, user.ChatID, user.LocationID, user.Name, user.Phone, addrArg)
+	// execute in transaction to keep locations and notifications in sync
+	tx, err := r.db.Conn.BeginTx(ctx, nil)
 	if err != nil {
-		// some drivers (Postgres) expect $1 style placeholders; to keep this code portable,
-		// only the driver needs to match the placeholder style. ExecContext will work with the
-		// configured driver for the DB in use.
-		return err
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// execute parameterized query using RETURNING id to remain DB-agnostic & fetch generated ID
+	query := `INSERT INTO user_locations (chat_id, location_id, name, phone, address_name) VALUES ($1, $2, $3, $4, $5) RETURNING id`
+	var insertedID int64
+	err = tx.QueryRowContext(ctx, query, user.ChatID, user.LocationID, user.Name, user.Phone, addrArg).Scan(&insertedID)
+	if err != nil {
+		return fmt.Errorf("failed to insert user location: %w", err)
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		// if driver doesn't support LastInsertId (e.g., Postgres), attempt to fall back gracefully
-		if err == sql.ErrNoRows {
-			return nil
+	// insert each notification preference setting
+	for _, setting := range user.NotificationSettings {
+		if strings.TrimSpace(setting) == "" {
+			continue
 		}
-		// ignore inability to fetch last insert id as it's optional for callers
-		return nil
+		prefQuery := `INSERT INTO user_notifications (user_location_id, notification_time) VALUES ($1, $2)`
+		_, err := tx.ExecContext(ctx, prefQuery, insertedID, setting)
+		if err != nil {
+			return fmt.Errorf("failed to insert notification preference: %w", err)
+		}
 	}
-	user.ID = id
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	user.ID = insertedID
 	return nil
 }
 
@@ -89,26 +100,59 @@ func (r *userRepository) DeleteUserLocationByChatID(ctx context.Context, chatID 
 }
 
 func (r *userRepository) ListUsers(ctx context.Context) ([]model.UserLocation, error) {
-	query := `SELECT id, name, phone, location_id, address_name FROM user_locations`
+	query := `
+		SELECT ul.id, ul.chat_id, ul.name, ul.phone, ul.location_id, ul.address_name, COALESCE(un.notification_time, '')
+		FROM user_locations ul
+		LEFT JOIN user_notifications un ON ul.id = un.user_location_id
+	`
 	rows, err := r.db.Conn.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var users []model.UserLocation
+	userMap := make(map[int64]*model.UserLocation)
+	var orderedIDs []int64
+
 	for rows.Next() {
-		var user model.UserLocation
-		if err := rows.Scan(&user.ID, &user.Name, &user.Phone, &user.LocationID, &user.AddressName); err != nil {
+		var id int64
+		var chatID int64
+		var name string
+		var phone string
+		var locationID string
+		var addressName string
+		var notificationTime string
+
+		if err := rows.Scan(&id, &chatID, &name, &phone, &locationID, &addressName, &notificationTime); err != nil {
 			return nil, err
 		}
-		users = append(users, user)
+
+		user, exists := userMap[id]
+		if !exists {
+			user = &model.UserLocation{
+				ID:          id,
+				ChatID:      chatID,
+				Name:        name,
+				Phone:       phone,
+				LocationID:  locationID,
+				AddressName: addressName,
+			}
+			userMap[id] = user
+			orderedIDs = append(orderedIDs, id)
+		}
+		if notificationTime != "" {
+			user.NotificationSettings = append(user.NotificationSettings, notificationTime)
+		}
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
+	users := make([]model.UserLocation, 0, len(orderedIDs))
+	for _, id := range orderedIDs {
+		users = append(users, *userMap[id])
+	}
 	return users, nil
 }
 
@@ -116,10 +160,12 @@ func (r *userRepository) ListUsersWithTodayGarbage(ctx context.Context, today ti
 	query := `
 	SELECT
 		u.id,
+		u.chat_id,
 		u.name,
 		u.phone,
 		u.location_id,
 		u.address_name,
+		COALESCE(un.notification_time, ''),
 		g.location_id,
 		g.date_zmieszane,
 		g.date_papier,
@@ -132,6 +178,7 @@ func (r *userRepository) ListUsersWithTodayGarbage(ctx context.Context, today ti
 		g.last_update
 	FROM user_locations u
 	JOIN garbage_schedules g ON u.location_id = g.location_id
+	LEFT JOIN user_notifications un ON u.id = un.user_location_id
 	`
 
 	rows, err := r.db.Conn.QueryContext(ctx, query)
@@ -140,37 +187,79 @@ func (r *userRepository) ListUsersWithTodayGarbage(ctx context.Context, today ti
 	}
 	defer rows.Close()
 
-	var matches []model.UserGarbageSchedule
+	type key struct {
+		userID     int64
+		locationID string
+	}
+	matchMap := make(map[key]*model.UserGarbageSchedule)
+	var orderedKeys []key
+
 	for rows.Next() {
-		var item model.UserGarbageSchedule
+		var id int64
+		var chatID int64
+		var name string
+		var phone string
+		var locationID string
+		var addressName string
+		var notificationTime string
 		var scheduleLocationID string
+		var sched model.GarbageSchedule
+
 		if err := rows.Scan(
-			&item.User.ID,
-			&item.User.Name,
-			&item.User.Phone,
-			&item.User.LocationID,
-			&item.User.AddressName,
+			&id,
+			&chatID,
+			&name,
+			&phone,
+			&locationID,
+			&addressName,
+			&notificationTime,
 			&scheduleLocationID,
-			&item.Schedule.DateZmieszane,
-			&item.Schedule.DatePapier,
-			&item.Schedule.DatePlastik,
-			&item.Schedule.DateSzklo,
-			&item.Schedule.DateBio,
-			&item.Schedule.DateZielone,
-			&item.Schedule.DateBioRestauracyjne,
-			&item.Schedule.DateGabaryty,
-			&item.Schedule.LastUpdate,
+			&sched.DateZmieszane,
+			&sched.DatePapier,
+			&sched.DatePlastik,
+			&sched.DateSzklo,
+			&sched.DateBio,
+			&sched.DateZielone,
+			&sched.DateBioRestauracyjne,
+			&sched.DateGabaryty,
+			&sched.LastUpdate,
 		); err != nil {
 			return nil, err
 		}
-		item.Schedule.LocationID = scheduleLocationID
-		if item.Schedule.HasToday(today) {
-			matches = append(matches, item)
+		sched.LocationID = scheduleLocationID
+
+		k := key{userID: id, locationID: locationID}
+		item, exists := matchMap[k]
+		if !exists {
+			item = &model.UserGarbageSchedule{
+				User: model.UserLocation{
+					ID:          id,
+					ChatID:      chatID,
+					Name:        name,
+					Phone:       phone,
+					LocationID:  locationID,
+					AddressName: addressName,
+				},
+				Schedule: sched,
+			}
+			matchMap[k] = item
+			orderedKeys = append(orderedKeys, k)
+		}
+		if notificationTime != "" {
+			item.User.NotificationSettings = append(item.User.NotificationSettings, notificationTime)
 		}
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	var matches []model.UserGarbageSchedule
+	for _, k := range orderedKeys {
+		item := matchMap[k]
+		if item.Schedule.HasToday(today) {
+			matches = append(matches, *item)
+		}
 	}
 
 	return matches, nil

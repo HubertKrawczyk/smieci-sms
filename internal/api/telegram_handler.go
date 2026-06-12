@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"smieci-sms/internal/messages"
 	"smieci-sms/internal/model"
 	"smieci-sms/internal/repository"
 	"smieci-sms/internal/service"
@@ -36,12 +37,13 @@ const (
 )
 
 type UserSession struct {
-	State        ConversationState
-	Street       string
-	Number       string
-	Postcode     string
-	LocationID   string
-	LocationName string
+	State               ConversationState
+	Street              string
+	Number              string
+	Postcode            string
+	LocationID          string
+	LocationName        string
+	SelectedPreferences []string
 }
 
 var (
@@ -93,7 +95,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 			if cb.Data == "loc_cancel" {
 				session.State = StateNone
-				h.sendTelegramMessage(chatID, "Registration canceled. Please type /start to try again.")
+				h.sendTelegramMessage(chatID, messages.RegistrationCanceled)
 				return
 			}
 
@@ -112,28 +114,104 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// Save selected variant option to your persistent storage layer
-			if err := h.repo.DeleteUserLocationByChatID(r.Context(), chatID); err != nil {
-				log.Printf("WARNING: failed to delete existing user location: %v", err)
-			}
-			err := h.repo.SaveUserLocation(r.Context(), model.UserLocation{
-				ChatID:      chatID,
-				LocationID:  selectedLocationID,
-				Name:        selectedLocationName, // Or fetch full record name mapping matching ID
-				Phone:       "123456789",
-				AddressName: session.Postcode,
-			})
+			// Store selected location in user session
+			session.LocationID = selectedLocationID
+			session.LocationName = selectedLocationName
+			session.SelectedPreferences = []string{} // Reset selected preferences
 
-			if err != nil {
-				log.Printf("ERROR: failed to save user location: %v", err)
-				h.sendTelegramMessage(chatID, "Something went wrong saving your location option.")
-			} else {
-				// Edit original button grid text away into a plain confirmed message string
-				confirmationMsg := fmt.Sprintf("Location choice confirmed (%s)! You have been successfully registered.", selectedLocationName)
-				h.sendTelegramEditMessage(chatID, cb.Message.MessageID, confirmationMsg)
-			}
+			// Change state to schedule options
+			session.State = StateAwaitingSchedule
 
-			session.State = StateNone
+			// Edit original button grid text away into a plain confirmed message string
+			h.sendTelegramEditMessage(chatID, cb.Message.MessageID, fmt.Sprintf(messages.SelectedLocationEdit, selectedLocationName))
+
+			// Send new message with schedule choices
+			keyboard := h.buildScheduleKeyboard(session.SelectedPreferences)
+			h.sendTelegramMessage(chatID, messages.SchedulePrompt, keyboard)
+			return
+		}
+
+		if session.State == StateAwaitingSchedule {
+			h.sendCallbackAcknowledgment(cb.ID)
+
+			if strings.HasPrefix(cb.Data, "pref_") {
+				pref := strings.TrimPrefix(cb.Data, "pref_")
+
+				if pref == "done" {
+					// Save the registration to DB!
+					// 1. Delete previous registration if any
+					if err := h.repo.DeleteUserLocationByChatID(r.Context(), chatID); err != nil {
+						log.Printf("WARNING: failed to delete existing user location: %v", err)
+					}
+
+					// 2. Insert new registration with SelectedPreferences
+					err := h.repo.SaveUserLocation(r.Context(), model.UserLocation{
+						ChatID:               chatID,
+						LocationID:           session.LocationID,
+						Name:                 session.LocationName,
+						Phone:                "123456789",
+						AddressName:          session.Postcode,
+						NotificationSettings: session.SelectedPreferences,
+					})
+
+					if err != nil {
+						log.Printf("ERROR: failed to save user location: %v", err)
+						h.sendTelegramEditMessage(chatID, cb.Message.MessageID, messages.SaveError)
+					} else {
+						// Edit the original message to remove buttons and show confirmation
+						var prefsStr []string
+						optionsMap := map[string]string{
+							"day_before_19": messages.OptDayBefore19,
+							"day_before_20": messages.OptDayBefore20,
+							"day_before_21": messages.OptDayBefore21,
+							"morning_7":      messages.OptMorning7,
+							"morning_8":      messages.OptMorning8,
+							"morning_9":      messages.OptMorning9,
+							"morning_10":     messages.OptMorning10,
+						}
+						for _, p := range session.SelectedPreferences {
+							if val, ok := optionsMap[p]; ok {
+								prefsStr = append(prefsStr, val)
+							}
+						}
+						var finalMsg string
+						if len(prefsStr) > 0 {
+							finalMsg = fmt.Sprintf(messages.ConfirmationWithPreferences, session.LocationName, strings.Join(prefsStr, ", "))
+						} else {
+							finalMsg = fmt.Sprintf(messages.ConfirmationNoPreferences, session.LocationName)
+						}
+						h.sendTelegramEditMessage(chatID, cb.Message.MessageID, finalMsg)
+					}
+
+					// Reset session state
+					session.State = StateNone
+					session.SelectedPreferences = nil
+					return
+				}
+
+				// Toggle preference
+				found := false
+				idx := -1
+				for i, p := range session.SelectedPreferences {
+					if p == pref {
+						found = true
+						idx = i
+						break
+					}
+				}
+
+				if found {
+					// Remove
+					session.SelectedPreferences = append(session.SelectedPreferences[:idx], session.SelectedPreferences[idx+1:]...)
+				} else {
+					// Add
+					session.SelectedPreferences = append(session.SelectedPreferences, pref)
+				}
+
+				// Rebuild and edit reply markup to show checkmarks updated!
+				newMenu := h.buildScheduleKeyboard(session.SelectedPreferences)
+				h.sendTelegramEditReplyMarkup(chatID, cb.Message.MessageID, newMenu)
+			}
 			return
 		}
 	}
@@ -144,7 +222,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 		session := getSession(chatID)
 		session.State = StateAwaitingStreet
-		h.sendTelegramMessage(chatID, "Welcome! Please reply with your street name.")
+		h.sendTelegramMessage(chatID, messages.Welcome)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -160,18 +238,18 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		case StateAwaitingStreet:
 			session.Street = text
 			session.State = StateAwaitingNumber
-			h.sendTelegramMessage(chatID, "Got it. What is the street number?")
+			h.sendTelegramMessage(chatID, messages.AwaitingNumber)
 		case StateAwaitingNumber:
 			session.Number = text
 			session.State = StateAwaitingPostcode
-			h.sendTelegramMessage(chatID, "Thanks! What is your postcode?")
+			h.sendTelegramMessage(chatID, messages.AwaitingPostcode)
 		case StateAwaitingPostcode:
 			session.Postcode = text
 
 			items, err := h.garbageService.GetLocationID(r.Context(), session.Street, session.Number, session.Postcode)
 			if err != nil {
 				session.State = StateNone
-				h.sendTelegramMessage(chatID, "Error finding location ID.")
+				h.sendTelegramMessage(chatID, messages.ErrorFindLocation)
 				return
 			}
 			// 1. Dynamically build the rows of inline buttons from your items array
@@ -185,23 +263,24 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Add a fallback cancel button at the bottom
-			cancelBtn := model.TelegramInlineButton{Text: "❌ None of these", CallbackData: "loc_cancel"}
+			cancelBtn := model.TelegramInlineButton{Text: messages.CancelButtonLabel, CallbackData: "loc_cancel"}
 			buttons = append(buttons, []model.TelegramInlineButton{cancelBtn})
 
 			inlineMenu := &model.TelegramInlineMenu{
 				InlineKeyboard: buttons,
 			}
 			h.sendTelegramMessage(chatID,
-				"Multiple locations found. Please select yours from the options below:",
+				messages.MultipleLocationsPrompt,
 				inlineMenu,
 			)
 
 			session.State = StateAwaitingLocationConfirmation
 		case StateAwaitingLocationConfirmation:
-			session.State = StateNone
-			h.sendTelegramMessage(chatID, "Sorry, something went wrong. Please type /start to begin the registration process.")
+			h.sendTelegramMessage(chatID, messages.AwaitingConfirmationReminder)
+		case StateAwaitingSchedule:
+			h.sendTelegramMessage(chatID, messages.AwaitingScheduleReminder)
 		default:
-			h.sendTelegramMessage(chatID, "Please type /start to begin the registration process.")
+			h.sendTelegramMessage(chatID, messages.PleaseStart)
 		}
 	}
 
@@ -283,4 +362,82 @@ func (h *TelegramHandler) sendTelegramEditMessage(chatID int64, messageID int64,
 		return
 	}
 	defer resp.Body.Close()
+}
+
+// sendTelegramEditReplyMarkup updates only the inline buttons layout dynamically
+func (h *TelegramHandler) sendTelegramEditReplyMarkup(chatID int64, messageID int64, markup *model.TelegramInlineMenu) {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageReplyMarkup", h.botToken)
+
+	payload := struct {
+		ChatID      int64                     `json:"chat_id"`
+		MessageID   int64                     `json:"message_id"`
+		ReplyMarkup *model.TelegramInlineMenu `json:"reply_markup"`
+	}{
+		ChatID:      chatID,
+		MessageID:   messageID,
+		ReplyMarkup: markup,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Failed to marshal edit reply markup payload: %v", err)
+		return
+	}
+
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Failed to post editMessageReplyMarkup: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+}
+
+// buildScheduleKeyboard returns the dynamic keyboard of notification preferences
+func (h *TelegramHandler) buildScheduleKeyboard(selected []string) *model.TelegramInlineMenu {
+	options := []struct {
+		Key  string
+		Text string
+	}{
+		{"day_before_19", messages.OptDayBefore19},
+		{"day_before_20", messages.OptDayBefore20},
+		{"day_before_21", messages.OptDayBefore21},
+		{"morning_7", messages.OptMorning7},
+		{"morning_8", messages.OptMorning8},
+		{"morning_9", messages.OptMorning9},
+		{"morning_10", messages.OptMorning10},
+	}
+
+	var keyboard [][]model.TelegramInlineButton
+	for _, opt := range options {
+		has := false
+		for _, s := range selected {
+			if s == opt.Key {
+				has = true
+				break
+			}
+		}
+
+		icon := "⬜"
+		if has {
+			icon = "✅"
+		}
+
+		keyboard = append(keyboard, []model.TelegramInlineButton{
+			{
+				Text:         fmt.Sprintf("%s %s", icon, opt.Text),
+				CallbackData: "pref_" + opt.Key,
+			},
+		})
+	}
+
+	keyboard = append(keyboard, []model.TelegramInlineButton{
+		{
+			Text:         messages.DoneButtonLabel,
+			CallbackData: "pref_done",
+		},
+	})
+
+	return &model.TelegramInlineMenu{
+		InlineKeyboard: keyboard,
+	}
 }
