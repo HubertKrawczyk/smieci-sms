@@ -42,6 +42,9 @@ jobs:
             curl -s "https://api.dynu.com/nic/update?hostname=smieci-powiadomienia.ddnsfree.com&password=${{ secrets.DYNU_PASSWORD }}&myip=${{ secrets.SERVER_HOST }}"
             
             # Force Docker Compose to rebuild the Go app with the new code
+            # Explicitly remove the old container first to bypass a known bug
+            # in docker-compose v1.29 ('ContainerConfig' KeyError) with newer Docker versions
+            docker rm -f smieci_app || true
             docker-compose up -d --build
             
             # Clean up dangling images left behind by the build process
