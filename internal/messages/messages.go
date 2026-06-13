@@ -1,7 +1,7 @@
 package messages
 
 const (
-	Welcome                      = "Witaj! Podaj proszę nazwę swojej ulicy."
+	Welcome                      = "Witaj! Podaj proszę nazwę swojej ulicy. Jeśli chcesz usunąć swoje dane, w dowolnym momencie wpisz /anuluj."
 	AwaitingNumber               = "Zrozumiałem. Jaki jest numer budynku/domu?"
 	AwaitingPostcode             = "Dzięki! Jaki jest Twój kod pocztowy?"
 	ErrorFindLocation            = "Wystąpił błąd podczas wyszukiwania identyfikatora lokalizacji."
@@ -18,6 +18,7 @@ const (
 	ConfirmationNoPreferences    = "Wybór lokalizacji potwierdzony (%s)! Rejestracja przebiegła pomyślnie (nie wybrano godzin powiadomień)."
 	AwaitingConfirmationReminder = "Wybierz adres za pomocą przycisków powyżej."
 	AwaitingScheduleReminder     = "Wybierz preferencje powiadomień za pomocą przycisków powyżej."
+	DataDeleted                  = "Twoje dane zostały usunięte z systemu. Jeśli chcesz zacząć od nowa, wpisz /start."
 
 	// Schedule Options
 	OptDayBefore19 = "Dzień wcześniej o 19:00"

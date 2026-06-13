@@ -214,6 +214,26 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if payload.Message != nil && payload.Message.Text == "/anuluj" {
+		chatID := payload.Message.Chat.ID
+		log.Printf("User on Chat ID %d wants to delete their data via /anuluj", chatID)
+
+		if err := h.repo.DeleteUserLocationByChatID(r.Context(), chatID); err != nil {
+			log.Printf("ERROR: failed to delete user location for chat ID %d: %v", chatID, err)
+		}
+
+		sessionMutex.Lock()
+		delete(sessions, chatID)
+		sessionMutex.Unlock()
+
+		h.sendTelegramMessage(chatID, messages.DataDeleted)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
 	if payload.Message != nil && payload.Message.Text == "/start" {
 		chatID := payload.Message.Chat.ID
 		fmt.Printf("User on Chat ID %d wants to START the process!\n", chatID)

@@ -33,9 +33,6 @@ func (r *userRepository) SaveUserLocation(ctx context.Context, user model.UserLo
 	if strings.TrimSpace(user.Name) == "" {
 		return fmt.Errorf("name must not be empty")
 	}
-	if strings.TrimSpace(user.Phone) == "" {
-		return fmt.Errorf("phone must not be empty")
-	}
 	if user.LocationID == "" {
 		return fmt.Errorf("location_id must not be empty")
 	}
@@ -427,4 +424,3 @@ func (r *userRepository) DeleteOrphanedSchedules(ctx context.Context) error {
 	_, err := r.db.Conn.ExecContext(ctx, query)
 	return err
 }
-
