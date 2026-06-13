@@ -143,8 +143,7 @@ resource "oci_core_instance" "free_arm_vm" {
       # 5. Bind the default SSH user directly to the Docker engine interface
       usermod -aG docker ubuntu
 
-      # 4. Sync public IP with Dynu using the variable securely
-      curl -s "https://api.dynu.com/nic/update?hostname=smieci-powiadomienia.ddnsfree.com&password=${var.dynu_password}"
+
     EOF
     )
   }

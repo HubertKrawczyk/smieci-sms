@@ -36,6 +36,10 @@ jobs:
             echo "TELEGRAM_SECRET_TOKEN=${{ secrets.TELEGRAM_SECRET_TOKEN }}" >> .env
             echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
             
+            # Automatically update Dynu DNS to point to this server's IP address
+            # (Requires adding DYNU_PASSWORD to GitHub Secrets)
+            curl -s "https://api.dynu.com/nic/update?hostname=smieci-powiadomienia.ddnsfree.com&password=${{ secrets.DYNU_PASSWORD }}&myip=${{ secrets.SERVER_HOST }}"
+            
             # Force Docker Compose to rebuild the Go app with the new code
             docker-compose up -d --build
             

@@ -1,5 +1,5 @@
 # Stage 1: Build the Go binary using the official Go Alpine image
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install git and certificates (needed for secure outbound webhooks to Telegram)
 RUN apk add --no-cache git ca-certificates
