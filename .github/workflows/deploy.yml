@@ -36,6 +36,7 @@ jobs:
             echo "TELEGRAM_SECRET_TOKEN=${{ secrets.TELEGRAM_SECRET_TOKEN }}" >> .env
             echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
             echo "CITY_GARBAGE_URL=${{ secrets.CITY_GARBAGE_URL }}" >> .env
+            echo "ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}" >> .env
             
             # Automatically update Dynu DNS to point to this server's IP address
             # (Requires adding DYNU_PASSWORD to GitHub Secrets)
