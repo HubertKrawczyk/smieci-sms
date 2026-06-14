@@ -20,7 +20,7 @@ Additionally, this project serves as a personal learning ground. I am using this
 - **AI tools**: Leveraging advanced AI agentic tools for pair programming, debugging, and development automation.
 
 ## 🛠 Key Features
-- Interactive Telegram bot for easy user registration (`/start`, `/harmonogram`, `/anuluj`).
+- Interactive Telegram bot for easy user registration (`/start`, `/harmonogram`, `/edytuj_harmonogram`, `/prywatnosc`, `/usun`).
 - Automated data fetching and synchronization with external municipal garbage schedules (updates every 3 days).
 - Background jobs for processing schedules and sending out notifications reliably.
 - Persistent and safe data storage using PostgreSQL.

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"smieci-sms/internal/commands"
 	"smieci-sms/internal/messages"
 	"smieci-sms/internal/model"
 	"smieci-sms/internal/repository"
@@ -71,7 +72,7 @@ func TestTelegramHandler_AnulujCommand(t *testing.T) {
 				ID:   chatID,
 				Type: "private",
 			},
-			Text: "/anuluj",
+			Text: commands.Usun,
 		},
 	}
 

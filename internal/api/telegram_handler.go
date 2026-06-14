@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"smieci-sms/internal/commands"
 	"smieci-sms/internal/messages"
 	"smieci-sms/internal/model"
 	"smieci-sms/internal/repository"
@@ -245,9 +246,9 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if payload.Message != nil && payload.Message.Text == "/anuluj" {
+	if payload.Message != nil && payload.Message.Text == commands.Usun {
 		chatID := payload.Message.Chat.ID
-		log.Printf("User on Chat ID %d wants to delete their data via /anuluj", chatID)
+		log.Printf("User on Chat ID %d wants to delete their data via %s", chatID, commands.Usun)
 
 		if err := h.repo.DeleteUserLocationByChatID(r.Context(), chatID); err != nil {
 			log.Printf("ERROR: failed to delete user location for chat ID %d: %v", chatID, err)
@@ -265,9 +266,9 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.Message != nil && payload.Message.Text == "/harmonogram" {
+	if payload.Message != nil && payload.Message.Text == commands.Harmonogram {
 		chatID := payload.Message.Chat.ID
-		log.Printf("User on Chat ID %d requested their schedule via /harmonogram", chatID)
+		log.Printf("User on Chat ID %d requested their schedule via %s", chatID, commands.Harmonogram)
 
 		schedule, err := h.repo.GetUserScheduleByChatID(r.Context(), chatID)
 		if err != nil {
@@ -347,9 +348,9 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.Message != nil && payload.Message.Text == "/edytuj_harmonogram" {
+	if payload.Message != nil && payload.Message.Text == commands.EdytujHarmonogram {
 		chatID := payload.Message.Chat.ID
-		log.Printf("User on Chat ID %d wants to edit schedule via /edytuj_harmonogram", chatID)
+		log.Printf("User on Chat ID %d wants to edit schedule via %s", chatID, commands.EdytujHarmonogram)
 
 		schedule, err := h.repo.GetUserScheduleByChatID(r.Context(), chatID)
 		if err != nil {
@@ -374,7 +375,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.Message != nil && (payload.Message.Text == "/prywatnosc" || payload.Message.Text == "/privacy") {
+	if payload.Message != nil && (payload.Message.Text == commands.Prywatnosc || payload.Message.Text == commands.Privacy) {
 		chatID := payload.Message.Chat.ID
 		log.Printf("User on Chat ID %d requested privacy policy", chatID)
 
@@ -386,7 +387,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.Message != nil && payload.Message.Text == "/start" {
+	if payload.Message != nil && payload.Message.Text == commands.Start {
 		chatID := payload.Message.Chat.ID
 		fmt.Printf("User on Chat ID %d wants to START the process!\n", chatID)
 
