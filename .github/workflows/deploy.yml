@@ -39,14 +39,9 @@ jobs:
             echo "ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}" >> .env
             
             # Automatically update Dynu DNS to point to this server's IP address
-            # (Requires adding DYNU_PASSWORD to GitHub Secrets)
             curl -s "https://api.dynu.com/nic/update?hostname=smieci-powiadomienia.ddnsfree.com&password=${{ secrets.DYNU_PASSWORD }}&myip=${{ secrets.SERVER_HOST }}"
             
-            # Force Docker Compose to rebuild the Go app with the new code
-            # Explicitly shut down the old stack first to bypass a known bug
-            # in docker-compose v1.29 ('ContainerConfig' KeyError) with newer Docker versions
-            docker-compose down
-            docker-compose up -d --build
+            docker compose up -d --build
             
             # Clean up dangling images left behind by the build process
             docker image prune -f
