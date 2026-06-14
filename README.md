@@ -1,4 +1,4 @@
-# Śmieci SMS (Warsaw Garbage Collection Reminder Bot)
+# Śmieci Powiadomienia (Warsaw Garbage Collection Reminder Bot)
 
 ## 📌 What is this project?
 This project is an automated bot system designed to remind residents about upcoming garbage collection days. Users can register their address via a Telegram bot, select their preferred notification times (e.g., the day before at 19:00, or the morning of at 07:00), and the system automatically fetches the latest garbage schedule from the city's database. When the collection day approaches, users receive timely reminders.
