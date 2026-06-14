@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"smieci-sms/internal/messages"
 	"smieci-sms/internal/model"
@@ -17,10 +18,11 @@ import (
 )
 
 type TelegramHandler struct {
-	repo           repository.UserRepository
-	garbageService service.GarbageService
-	secretToken    string
-	telegramSvc    service.TelegramService
+	repo              repository.UserRepository
+	garbageService    service.GarbageService
+	secretToken       string
+	telegramSvc       service.TelegramService
+	registrationQueue chan string
 }
 
 type ConversationState int
@@ -59,7 +61,33 @@ func getSession(chatID int64) *UserSession {
 }
 
 func NewTelegramHandler(repo repository.UserRepository, garbageService service.GarbageService, secretToken string, telegramSvc service.TelegramService) *TelegramHandler {
-	return &TelegramHandler{repo: repo, garbageService: garbageService, secretToken: secretToken, telegramSvc: telegramSvc}
+	h := &TelegramHandler{
+		repo:              repo,
+		garbageService:    garbageService,
+		secretToken:       secretToken,
+		telegramSvc:       telegramSvc,
+		registrationQueue: make(chan string, 200), // Buffer for up to 200 concurrent registrations
+	}
+	go h.processRegistrationQueue()
+	return h
+}
+
+func (h *TelegramHandler) processRegistrationQueue() {
+	for locID := range h.registrationQueue {
+		log.Printf("Processing initial schedule fetch for location %s", locID)
+		schedules, err := h.garbageService.FetchSchedulesForLocations(context.Background(), []string{locID})
+		if err != nil {
+			log.Printf("ERROR: failed to fetch schedule for new location %s: %v", locID, err)
+			continue
+		}
+		if len(schedules) > 0 {
+			if err := h.repo.SaveGarbageSchedules(context.Background(), schedules); err != nil {
+				log.Printf("ERROR: failed to save fetched schedule to DB for location %s: %v", locID, err)
+			} else {
+				log.Printf("Successfully fetched and saved schedule for new location %s", locID)
+			}
+		}
+	}
 }
 
 func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
@@ -156,6 +184,13 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 						log.Printf("ERROR: failed to save user location: %v", err)
 						h.sendTelegramEditMessage(chatID, cb.Message.MessageID, messages.SaveError)
 					} else {
+						// Send to queue non-blockingly so we fetch schedule in background
+						select {
+						case h.registrationQueue <- session.LocationID:
+						default:
+							log.Printf("WARNING: registration queue full, skipping immediate fetch for %s", session.LocationID)
+						}
+
 						// Edit the original message to remove buttons and show confirmation
 						var prefsStr []string
 						optionsMap := map[string]string{
@@ -234,6 +269,51 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if payload.Message != nil && payload.Message.Text == "/harmonogram" {
+		chatID := payload.Message.Chat.ID
+		log.Printf("User on Chat ID %d requested their schedule via /harmonogram", chatID)
+
+		schedule, err := h.repo.GetUserScheduleByChatID(r.Context(), chatID)
+		if err != nil {
+			log.Printf("ERROR: failed to get schedule for chat ID %d: %v", chatID, err)
+			h.sendTelegramMessage(chatID, "Wystąpił błąd podczas pobierania harmonogramu. Spróbuj ponownie później.")
+		} else if schedule == nil {
+			h.sendTelegramMessage(chatID, "Nie znaleziono Twojego adresu w bazie. Wpisz /start aby rozpocząć rejestrację.")
+		} else if schedule.Schedule.LocationID == "" {
+			h.sendTelegramMessage(chatID, "Jesteś zarejestrowany, ale Twój harmonogram nie został jeszcze pobrany z systemu. Spróbuj ponownie za jakiś czas.")
+		} else {
+			var sb strings.Builder
+			if !schedule.Schedule.LastUpdate.IsZero() {
+				sb.WriteString(fmt.Sprintf("📅 Harmonogram (aktualizacja z bazy: %s)\n\n", schedule.Schedule.LastUpdate.Format("2006-01-02 15:04")))
+			} else {
+				sb.WriteString("📅 Harmonogram (brak danych o aktualizacji)\n\n")
+			}
+
+			formatDate := func(t *time.Time) string {
+				if t == nil {
+					return "brak danych"
+				}
+				return t.Format("2006-01-02")
+			}
+
+			sb.WriteString(fmt.Sprintf("⚫ Zmieszane: %s\n", formatDate(schedule.Schedule.DateZmieszane)))
+			sb.WriteString(fmt.Sprintf("🔵 Papier: %s\n", formatDate(schedule.Schedule.DatePapier)))
+			sb.WriteString(fmt.Sprintf("🟡 Plastik: %s\n", formatDate(schedule.Schedule.DatePlastik)))
+			sb.WriteString(fmt.Sprintf("🟢 Szkło: %s\n", formatDate(schedule.Schedule.DateSzklo)))
+			sb.WriteString(fmt.Sprintf("🟤 Bio: %s\n", formatDate(schedule.Schedule.DateBio)))
+			sb.WriteString(fmt.Sprintf("🌿 Zielone: %s\n", formatDate(schedule.Schedule.DateZielone)))
+			sb.WriteString(fmt.Sprintf("🍕 Bio Restauracyjne: %s\n", formatDate(schedule.Schedule.DateBioRestauracyjne)))
+			sb.WriteString(fmt.Sprintf("🛋️ Gabaryty: %s", formatDate(schedule.Schedule.DateGabaryty)))
+
+			h.sendTelegramMessage(chatID, sb.String())
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
 	if payload.Message != nil && payload.Message.Text == "/start" {
 		chatID := payload.Message.Chat.ID
 		fmt.Printf("User on Chat ID %d wants to START the process!\n", chatID)
@@ -298,7 +378,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		case StateAwaitingSchedule:
 			h.sendTelegramMessage(chatID, messages.AwaitingScheduleReminder)
 		default:
-			h.sendTelegramMessage(chatID, messages.PleaseStart)
+			h.sendTelegramMessage(chatID, messages.UnknownCommand)
 		}
 	}
 

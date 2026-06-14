@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 type UserRepository interface {
 	SaveUserLocation(ctx context.Context, user model.UserLocation) error
 	DeleteUserLocationByChatID(ctx context.Context, chatID int64) error
+	GetUserScheduleByChatID(ctx context.Context, chatID int64) (*model.UserGarbageSchedule, error)
 	ListUsers(ctx context.Context) ([]model.UserLocation, error)
 	GetOutdatedLocationIDs(ctx context.Context) ([]string, error)
 	SaveGarbageSchedules(ctx context.Context, schedules []model.GarbageSchedule) error
@@ -94,6 +96,83 @@ func (r *userRepository) DeleteUserLocationByChatID(ctx context.Context, chatID 
 	query := `DELETE FROM user_locations WHERE chat_id = $1`
 	_, err := r.db.Conn.ExecContext(ctx, query, chatID)
 	return err
+}
+
+func (r *userRepository) GetUserScheduleByChatID(ctx context.Context, chatID int64) (*model.UserGarbageSchedule, error) {
+	query := `
+	SELECT
+		u.id,
+		u.chat_id,
+		u.name,
+		u.phone,
+		u.location_id,
+		u.address_name,
+		g.location_id,
+		g.date_zmieszane,
+		g.date_papier,
+		g.date_plastik,
+		g.date_szklo,
+		g.date_bio,
+		g.date_zielone,
+		g.date_bio_restauracyjne,
+		g.date_gabaryty,
+		g.last_update
+	FROM user_locations u
+	LEFT JOIN garbage_schedules g ON u.location_id = g.location_id
+	WHERE u.chat_id = $1
+	LIMIT 1
+	`
+
+	row := r.db.Conn.QueryRowContext(ctx, query, chatID)
+
+	var id int64
+	var dbChatID int64
+	var name string
+	var phone string
+	var locationID string
+	var addressName string
+	var scheduleLocationID *string
+	var sched model.GarbageSchedule
+
+	if err := row.Scan(
+		&id,
+		&dbChatID,
+		&name,
+		&phone,
+		&locationID,
+		&addressName,
+		&scheduleLocationID,
+		&sched.DateZmieszane,
+		&sched.DatePapier,
+		&sched.DatePlastik,
+		&sched.DateSzklo,
+		&sched.DateBio,
+		&sched.DateZielone,
+		&sched.DateBioRestauracyjne,
+		&sched.DateGabaryty,
+		&sched.LastUpdate,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Return nil if no user found
+		}
+		return nil, err
+	}
+
+	if scheduleLocationID != nil {
+		sched.LocationID = *scheduleLocationID
+	}
+
+	return &model.UserGarbageSchedule{
+		User: model.UserLocation{
+			ID:          id,
+			ChatID:      dbChatID,
+			Name:        name,
+			Phone:       phone,
+			LocationID:  locationID,
+			AddressName: addressName,
+		},
+		Schedule: sched,
+	}, nil
 }
 
 func (r *userRepository) ListUsers(ctx context.Context) ([]model.UserLocation, error) {

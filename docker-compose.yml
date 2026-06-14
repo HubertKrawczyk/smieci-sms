@@ -10,6 +10,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: smieci_sms
       TZ: Europe/Warsaw
+    command: postgres -c shared_buffers=64MB -c work_mem=4MB -c maintenance_work_mem=16MB -c max_connections=20
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
