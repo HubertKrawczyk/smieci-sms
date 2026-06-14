@@ -284,6 +284,16 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 				sb.WriteString(fmt.Sprintf("📍 Adres: %s\n", schedule.User.AddressName))
 			}
 			
+			if len(schedule.User.NotificationSettings) > 0 {
+				var prefsStr []string
+				for _, p := range schedule.User.NotificationSettings {
+					prefsStr = append(prefsStr, formatPreference(p))
+				}
+				sb.WriteString(fmt.Sprintf("🔔 Powiadomienia: %s\n\n", strings.Join(prefsStr, ", ")))
+			} else {
+				sb.WriteString("🔔 Powiadomienia: Brak\n\n")
+			}
+			
 			if !schedule.Schedule.LastUpdate.IsZero() {
 				sb.WriteString(fmt.Sprintf(messages.HarmonogramHeaderDate, schedule.Schedule.LastUpdate.Format("2006-01-02 15:04")))
 			} else {
