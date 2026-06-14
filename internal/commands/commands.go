@@ -3,7 +3,7 @@ package commands
 const (
 	Start             = "/start"
 	Harmonogram       = "/harmonogram"
-	EdytujHarmonogram = "/edytuj_harmonogram"
+	EdytujPowiadomienia = "/edytuj_powiadomienia"
 	Usun              = "/usun"
 	Prywatnosc        = "/prywatnosc"
 	Privacy           = "/privacy"

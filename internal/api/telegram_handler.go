@@ -348,9 +348,9 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.Message != nil && payload.Message.Text == commands.EdytujHarmonogram {
+	if payload.Message != nil && payload.Message.Text == commands.EdytujPowiadomienia {
 		chatID := payload.Message.Chat.ID
-		log.Printf("User on Chat ID %d wants to edit schedule via %s", chatID, commands.EdytujHarmonogram)
+		log.Printf("User on Chat ID %d wants to edit schedule via %s", chatID, commands.EdytujPowiadomienia)
 
 		schedule, err := h.repo.GetUserScheduleByChatID(r.Context(), chatID)
 		if err != nil {
