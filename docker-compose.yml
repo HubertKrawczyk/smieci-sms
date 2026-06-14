@@ -33,6 +33,7 @@ services:
       - TELEGRAM_SECRET_TOKEN=${TELEGRAM_SECRET_TOKEN}
       - DATABASE_URL=postgres://smieci_user:${DB_PASSWORD}@db:5432/smieci_sms?sslmode=disable
       - CITY_GARBAGE_URL=${CITY_GARBAGE_URL}
+      - ADMIN_SECRET=${ADMIN_SECRET}
     depends_on:
       db:
         condition: service_healthy

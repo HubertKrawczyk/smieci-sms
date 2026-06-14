@@ -337,6 +337,18 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if payload.Message != nil && (payload.Message.Text == "/prywatnosc" || payload.Message.Text == "/privacy") {
+		chatID := payload.Message.Chat.ID
+		log.Printf("User on Chat ID %d requested privacy policy", chatID)
+		
+		h.sendTelegramMessage(chatID, messages.PrivacyPolicy)
+		
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
 	if payload.Message != nil && payload.Message.Text == "/start" {
 		chatID := payload.Message.Chat.ID
 		fmt.Printf("User on Chat ID %d wants to START the process!\n", chatID)

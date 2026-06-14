@@ -1,7 +1,12 @@
 package messages
 
 const (
-	Welcome                      = "Witaj! Podaj proszę nazwę swojej ulicy. Jeśli chcesz usunąć swoje dane, w dowolnym momencie wpisz /anuluj."
+	Welcome                      = "Witaj! Podaj proszę nazwę swojej ulicy.\n\n" +
+		"ℹ️ Ta aplikacja nie jest oficjalną aplikacją miasta Warszawa.\n" +
+		"🔒 Dla Twojego bezpieczeństwa nie zapisujemy Twojego numeru telefonu ani nazwy użytkownika. " +
+		"Zapisywany jest wyłącznie identyfikator chatu (ChatID) oraz wybrany adres.\n" +
+		"Wpisz /prywatnosc, aby przeczytać Politykę Prywatności.\n\n" +
+		"Jeśli chcesz całkowicie usunąć swoje dane, w dowolnym momencie wpisz /anuluj."
 	AwaitingNumber               = "Zrozumiałem. Jaki jest numer budynku/domu?"
 	AwaitingPostcode             = "Dzięki! Jaki jest Twój kod pocztowy?"
 	ErrorFindLocation            = "Wystąpił błąd podczas wyszukiwania identyfikatora lokalizacji."
@@ -19,6 +24,16 @@ const (
 	AwaitingConfirmationReminder = "Wybierz adres za pomocą przycisków powyżej."
 	AwaitingScheduleReminder     = "Wybierz preferencje powiadomień za pomocą przycisków powyżej."
 	DataDeleted                  = "Twoje dane zostały usunięte z systemu. Jeśli chcesz zacząć od nowa, wpisz /start."
+	
+	PrivacyPolicy = `🛡️ Polityka Prywatności
+
+1. Administrator danych: Twórca tego bota.
+2. Cel przetwarzania: Wysyłanie automatycznych powiadomień o harmonogramie wywozu śmieci.
+3. Zbierane dane:
+   - Telegram Chat ID (Twoje imię, nazwa użytkownika czy numer telefonu z Telegrama NIE są zapisywane).
+   - Wybrany adres (dokładna nazwa lokalizacji oraz identyfikator punktu wywozu zwrócone przez miejskie API Warszawy).
+4. Przechowywanie danych: Dane są przechowywane w bazie wyłącznie po to, aby móc wysyłać powiadomienia. W każdej chwili możesz je usunąć za pomocą komendy /anuluj.
+5. Status: Aplikacja jest projektem prywatnym i nie jest oficjalnym produktem m.st. Warszawy. Dane nie są przekazywane podmiotom trzecim.`
 
 	HarmonogramError         = "Wystąpił błąd podczas pobierania harmonogramu. Spróbuj ponownie później."
 	HarmonogramNotRegistered = "Nie znaleziono Twojego adresu w bazie. Wpisz /start aby rozpocząć rejestrację."
