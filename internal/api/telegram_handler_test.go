@@ -94,12 +94,9 @@ func TestTelegramHandler_AnulujCommand(t *testing.T) {
 		t.Errorf("expected status code %d, got %d", http.StatusOK, w.Code)
 	}
 
-	// Verify repository delete was called
-	if !repo.deleteCalled {
-		t.Errorf("expected DeleteUserLocationByChatID to be called")
-	}
-	if repo.deletedChatID != chatID {
-		t.Errorf("expected deleted chat ID to be %d, got %d", chatID, repo.deletedChatID)
+	// Verify repository delete was NOT called yet
+	if repo.deleteCalled {
+		t.Errorf("expected DeleteUserLocationByChatID to NOT be called on /usun command")
 	}
 
 	// Verify Telegram message was sent
@@ -109,22 +106,16 @@ func TestTelegramHandler_AnulujCommand(t *testing.T) {
 	if telegramSvc.sentChatID != chatID {
 		t.Errorf("expected telegram chat ID to be %d, got %d", chatID, telegramSvc.sentChatID)
 	}
-	if telegramSvc.sentText != messages.DataDeleted {
-		t.Errorf("expected telegram text to be %q, got %q", messages.DataDeleted, telegramSvc.sentText)
+	if telegramSvc.sentText != messages.DeleteConfirmationPrompt {
+		t.Errorf("expected telegram text to be %q, got %q", messages.DeleteConfirmationPrompt, telegramSvc.sentText)
 	}
 
-	// Verify that the session has been deleted/reset (so State is now StateNone)
+	// Verify that the session has NOT been deleted
 	sessionMutex.Lock()
 	_, exists := sessions[chatID]
 	sessionMutex.Unlock()
 
-	if exists {
-		t.Errorf("expected session for chat ID %d to be deleted from global map", chatID)
-	}
-
-	// Double check that getting a new session starts with StateNone
-	newSess := getOrCreateSession(chatID)
-	if newSess.State != StateNone {
-		t.Errorf("expected new session state to be StateNone, got %v", newSess.State)
+	if !exists {
+		t.Errorf("expected session for chat ID %d to NOT be deleted from global map yet", chatID)
 	}
 }

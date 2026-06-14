@@ -27,6 +27,10 @@ const (
 	AwaitingConfirmationReminder = "Wybierz adres za pomocą przycisków powyżej."
 	AwaitingScheduleReminder     = "Wybierz preferencje powiadomień za pomocą przycisków powyżej."
 	DataDeleted                  = "Twoje dane zostały usunięte z systemu. Jeśli chcesz zacząć od nowa, wpisz " + commands.Start + "."
+	DeleteConfirmationPrompt     = "Czy na pewno chcesz usunąć wszystkie swoje dane z systemu? Przestaniesz otrzymywać powiadomienia."
+	DeleteConfirmButton          = "⚠️ Tak, usuń moje dane"
+	DeleteCancelButton           = "❌ Nie, zostaw"
+	DeleteCanceledMessage        = "Usuwanie anulowane."
 
 	PrivacyPolicy = `🛡️ Polityka Prywatności
 

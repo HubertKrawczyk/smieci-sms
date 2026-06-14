@@ -119,6 +119,25 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		chatID := cb.Message.Chat.ID
 		session := getOrCreateSession(chatID)
 
+		if cb.Data == "delete_confirm" {
+			h.sendCallbackAcknowledgment(cb.ID)
+			if err := h.repo.DeleteUserLocationByChatID(r.Context(), chatID); err != nil {
+				log.Printf("ERROR: failed to delete user location for chat ID %d: %v", chatID, err)
+			}
+			sessionMutex.Lock()
+			delete(sessions, chatID)
+			sessionMutex.Unlock()
+
+			h.sendTelegramEditMessage(chatID, cb.Message.MessageID, messages.DataDeleted)
+			return
+		}
+
+		if cb.Data == "delete_cancel" {
+			h.sendCallbackAcknowledgment(cb.ID)
+			h.sendTelegramEditMessage(chatID, cb.Message.MessageID, messages.DeleteCanceledMessage)
+			return
+		}
+
 		if session.State == StateAwaitingLocationConfirmation {
 			// Acknowledge click immediately to clear loading icon on user screen
 			h.sendCallbackAcknowledgment(cb.ID)
@@ -250,15 +269,18 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		chatID := payload.Message.Chat.ID
 		log.Printf("User on Chat ID %d wants to delete their data via %s", chatID, commands.Usun)
 
-		if err := h.repo.DeleteUserLocationByChatID(r.Context(), chatID); err != nil {
-			log.Printf("ERROR: failed to delete user location for chat ID %d: %v", chatID, err)
+		keyboard := &model.TelegramInlineMenu{
+			InlineKeyboard: [][]model.TelegramInlineButton{
+				{
+					{Text: messages.DeleteConfirmButton, CallbackData: "delete_confirm"},
+				},
+				{
+					{Text: messages.DeleteCancelButton, CallbackData: "delete_cancel"},
+				},
+			},
 		}
 
-		sessionMutex.Lock()
-		delete(sessions, chatID)
-		sessionMutex.Unlock()
-
-		h.sendTelegramMessage(chatID, messages.DataDeleted)
+		h.sendTelegramMessage(chatID, messages.DeleteConfirmationPrompt, keyboard)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
