@@ -1,12 +1,13 @@
 package messages
 
 const (
-	Welcome                      = "Witaj! Podaj proszę nazwę swojej ulicy.\n\n" +
+	Welcome = "Witaj! \n\n" +
 		"ℹ️ Ta aplikacja nie jest oficjalną aplikacją miasta Warszawa.\n" +
 		"🔒 Dla Twojego bezpieczeństwa nie zapisujemy Twojego numeru telefonu ani nazwy użytkownika. " +
 		"Zapisywany jest wyłącznie identyfikator chatu (ChatID) oraz wybrany adres.\n" +
 		"Wpisz /prywatnosc, aby przeczytać Politykę Prywatności.\n\n" +
-		"Jeśli chcesz całkowicie usunąć swoje dane, w dowolnym momencie wpisz /anuluj."
+		"Jeśli chcesz całkowicie usunąć swoje dane, w dowolnym momencie wpisz /anuluj. \n\n" +
+		"Aby zacząć, podaj proszę nazwę swojej ulicy:"
 	AwaitingNumber               = "Zrozumiałem. Jaki jest numer budynku/domu?"
 	AwaitingPostcode             = "Dzięki! Jaki jest Twój kod pocztowy?"
 	ErrorFindLocation            = "Wystąpił błąd podczas wyszukiwania identyfikatora lokalizacji."
@@ -24,7 +25,7 @@ const (
 	AwaitingConfirmationReminder = "Wybierz adres za pomocą przycisków powyżej."
 	AwaitingScheduleReminder     = "Wybierz preferencje powiadomień za pomocą przycisków powyżej."
 	DataDeleted                  = "Twoje dane zostały usunięte z systemu. Jeśli chcesz zacząć od nowa, wpisz /start."
-	
+
 	PrivacyPolicy = `🛡️ Polityka Prywatności
 
 1. Administrator danych: Twórca tego bota.
