@@ -20,6 +20,22 @@ const (
 	AwaitingScheduleReminder     = "Wybierz preferencje powiadomień za pomocą przycisków powyżej."
 	DataDeleted                  = "Twoje dane zostały usunięte z systemu. Jeśli chcesz zacząć od nowa, wpisz /start."
 
+	HarmonogramError         = "Wystąpił błąd podczas pobierania harmonogramu. Spróbuj ponownie później."
+	HarmonogramNotRegistered = "Nie znaleziono Twojego adresu w bazie. Wpisz /start aby rozpocząć rejestrację."
+	HarmonogramPending       = "Jesteś zarejestrowany, ale Twój harmonogram nie został jeszcze pobrany z systemu. Spróbuj ponownie za jakiś czas."
+	HarmonogramHeaderDate    = "📅 Harmonogram (aktualizacja z bazy: %s)\n\n"
+	HarmonogramHeaderNoDate  = "📅 Harmonogram (brak danych o aktualizacji)\n\n"
+	HarmonogramNoData        = "Brak danych "
+
+	FractionZmieszane        = "Zmieszane"
+	FractionPapier           = "Papier"
+	FractionPlastik          = "Plastik"
+	FractionSzklo            = "Szkło"
+	FractionBio              = "Bio"
+	FractionZielone          = "Zielone"
+	FractionBioRestauracyjne = "Bio Restauracyjne"
+	FractionGabaryty         = "Gabaryty"
+
 	// Schedule Options
 	OptDayBefore19 = "Dzień wcześniej o 19:00"
 	OptDayBefore20 = "Dzień wcześniej o 20:00"

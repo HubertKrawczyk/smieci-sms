@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -276,36 +277,58 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		schedule, err := h.repo.GetUserScheduleByChatID(r.Context(), chatID)
 		if err != nil {
 			log.Printf("ERROR: failed to get schedule for chat ID %d: %v", chatID, err)
-			h.sendTelegramMessage(chatID, "Wystąpił błąd podczas pobierania harmonogramu. Spróbuj ponownie później.")
+			h.sendTelegramMessage(chatID, messages.HarmonogramError)
 		} else if schedule == nil {
-			h.sendTelegramMessage(chatID, "Nie znaleziono Twojego adresu w bazie. Wpisz /start aby rozpocząć rejestrację.")
+			h.sendTelegramMessage(chatID, messages.HarmonogramNotRegistered)
 		} else if schedule.Schedule.LocationID == "" {
-			h.sendTelegramMessage(chatID, "Jesteś zarejestrowany, ale Twój harmonogram nie został jeszcze pobrany z systemu. Spróbuj ponownie za jakiś czas.")
+			h.sendTelegramMessage(chatID, messages.HarmonogramPending)
 		} else {
 			var sb strings.Builder
 			if !schedule.Schedule.LastUpdate.IsZero() {
-				sb.WriteString(fmt.Sprintf("📅 Harmonogram (aktualizacja z bazy: %s)\n\n", schedule.Schedule.LastUpdate.Format("2006-01-02 15:04")))
+				sb.WriteString(fmt.Sprintf(messages.HarmonogramHeaderDate, schedule.Schedule.LastUpdate.Format("2006-01-02 15:04")))
 			} else {
-				sb.WriteString("📅 Harmonogram (brak danych o aktualizacji)\n\n")
+				sb.WriteString(messages.HarmonogramHeaderNoDate)
 			}
 
-			formatDate := func(t *time.Time) string {
-				if t == nil {
-					return "brak danych"
+			type ScheduleEntry struct {
+				Name string
+				Icon string
+				Date *time.Time
+			}
+
+			entries := []ScheduleEntry{
+				{messages.FractionZmieszane, "⚫", schedule.Schedule.DateZmieszane},
+				{messages.FractionPapier, "🔵", schedule.Schedule.DatePapier},
+				{messages.FractionPlastik, "🟡", schedule.Schedule.DatePlastik},
+				{messages.FractionSzklo, "🟢", schedule.Schedule.DateSzklo},
+				{messages.FractionBio, "🟤", schedule.Schedule.DateBio},
+				{messages.FractionZielone, "🌿", schedule.Schedule.DateZielone},
+				{messages.FractionBioRestauracyjne, "🥗", schedule.Schedule.DateBioRestauracyjne},
+				{messages.FractionGabaryty, "🛋️", schedule.Schedule.DateGabaryty},
+			}
+
+			sort.Slice(entries, func(i, j int) bool {
+				if entries[i].Date == nil && entries[j].Date == nil {
+					return entries[i].Name < entries[j].Name
 				}
-				return t.Format("2006-01-02")
+				if entries[i].Date == nil {
+					return false // nil goes to the end
+				}
+				if entries[j].Date == nil {
+					return true
+				}
+				return entries[i].Date.Before(*entries[j].Date)
+			})
+
+			for _, e := range entries {
+				dateStr := messages.HarmonogramNoData
+				if e.Date != nil {
+					dateStr = e.Date.Format("2006-01-02") + "  "
+				}
+				sb.WriteString(fmt.Sprintf("%s %s %s\n", dateStr, e.Icon, e.Name))
 			}
 
-			sb.WriteString(fmt.Sprintf("⚫ Zmieszane: %s\n", formatDate(schedule.Schedule.DateZmieszane)))
-			sb.WriteString(fmt.Sprintf("🔵 Papier: %s\n", formatDate(schedule.Schedule.DatePapier)))
-			sb.WriteString(fmt.Sprintf("🟡 Plastik: %s\n", formatDate(schedule.Schedule.DatePlastik)))
-			sb.WriteString(fmt.Sprintf("🟢 Szkło: %s\n", formatDate(schedule.Schedule.DateSzklo)))
-			sb.WriteString(fmt.Sprintf("🟤 Bio: %s\n", formatDate(schedule.Schedule.DateBio)))
-			sb.WriteString(fmt.Sprintf("🌿 Zielone: %s\n", formatDate(schedule.Schedule.DateZielone)))
-			sb.WriteString(fmt.Sprintf("🍕 Bio Restauracyjne: %s\n", formatDate(schedule.Schedule.DateBioRestauracyjne)))
-			sb.WriteString(fmt.Sprintf("🛋️ Gabaryty: %s", formatDate(schedule.Schedule.DateGabaryty)))
-
-			h.sendTelegramMessage(chatID, sb.String())
+			h.sendTelegramMessage(chatID, strings.TrimSpace(sb.String()))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
