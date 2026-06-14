@@ -46,6 +46,13 @@ func (s *Scheduler) ScheduleDailyTasks() {
 		// Run once immediately on startup so notifications check runs at start
 		s.runHourlyJob()
 
+		// Align to the top of the next hour
+		now := time.Now()
+		nextHour := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, 0, 0, 0, now.Location())
+		time.Sleep(nextHour.Sub(now))
+
+		s.runHourlyJob() // run exactly at top of the hour
+
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 
@@ -106,41 +113,25 @@ func (s *Scheduler) runHourlyJob() {
 	now := time.Now()
 	hour := now.Hour()
 
-	var targetPref string
-	var isTomorrow bool
+	// 1. Process notifications for today (morning_X)
+	s.processNotifications(ctx, fmt.Sprintf("morning_%d", hour), false, now)
 
-	switch hour {
-	case 7:
-		targetPref = "morning_7"
-		isTomorrow = false
-	case 8:
-		targetPref = "morning_8"
-		isTomorrow = false
-	case 9:
-		targetPref = "morning_9"
-		isTomorrow = false
-	case 10:
-		targetPref = "morning_10"
-		isTomorrow = false
-	case 19:
-		targetPref = "day_before_19"
-		isTomorrow = true
-	case 20:
-		targetPref = "day_before_20"
-		isTomorrow = true
-	case 21:
-		targetPref = "day_before_21"
-		isTomorrow = true
-	default:
-		log.Printf("Scheduler: hour %d has no notifications configured. Skipping.", hour)
-		return
-	}
+	// 2. Process notifications for tomorrow (day_before_X)
+	s.processNotifications(ctx, fmt.Sprintf("day_before_%d", hour), true, now)
 
+	log.Println("=== Hourly Scheduler Job Finished ===")
+}
+
+func (s *Scheduler) processNotifications(ctx context.Context, targetPref string, isTomorrow bool, now time.Time) {
 	log.Printf("Scheduler: Processing notifications for preference %q...", targetPref)
 
 	userSchedules, err := s.userRepo.ListUsersWithPreferenceAndSchedule(ctx, targetPref)
 	if err != nil {
 		log.Printf("Scheduler error: failed to fetch users with preference %q: %v", targetPref, err)
+		return
+	}
+
+	if len(userSchedules) == 0 {
 		return
 	}
 
@@ -179,8 +170,6 @@ func (s *Scheduler) runHourlyJob() {
 			}
 		}
 	}
-
-	log.Println("=== Hourly Scheduler Job Finished ===")
 }
 
 func (s *Scheduler) checkPickupForDate(sched *model.GarbageSchedule, targetDate time.Time) []string {

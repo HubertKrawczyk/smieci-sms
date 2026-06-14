@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -194,19 +195,8 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 						// Edit the original message to remove buttons and show confirmation
 						var prefsStr []string
-						optionsMap := map[string]string{
-							"day_before_19": messages.OptDayBefore19,
-							"day_before_20": messages.OptDayBefore20,
-							"day_before_21": messages.OptDayBefore21,
-							"morning_7":      messages.OptMorning7,
-							"morning_8":      messages.OptMorning8,
-							"morning_9":      messages.OptMorning9,
-							"morning_10":     messages.OptMorning10,
-						}
 						for _, p := range session.SelectedPreferences {
-							if val, ok := optionsMap[p]; ok {
-								prefsStr = append(prefsStr, val)
-							}
+							prefsStr = append(prefsStr, formatPreference(p))
 						}
 						var finalMsg string
 						if len(prefsStr) > 0 {
@@ -399,7 +389,52 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		case StateAwaitingLocationConfirmation:
 			h.sendTelegramMessage(chatID, messages.AwaitingConfirmationReminder)
 		case StateAwaitingSchedule:
-			h.sendTelegramMessage(chatID, messages.AwaitingScheduleReminder)
+			textUpper := strings.ToUpper(strings.TrimSpace(text))
+
+			reDayBefore := regexp.MustCompile(`^W\s*(\d{1,2})(?::00)?$`)
+			reMorning := regexp.MustCompile(`^(\d{1,2})(?::00)?$`)
+
+			if matches := reDayBefore.FindStringSubmatch(textUpper); len(matches) > 1 {
+				pref := fmt.Sprintf("day_before_%s", matches[1])
+				
+				alreadyHas := false
+				for _, p := range session.SelectedPreferences {
+					if p == pref {
+						alreadyHas = true
+						break
+					}
+				}
+
+				if alreadyHas {
+					newMenu := h.buildScheduleKeyboard(session.SelectedPreferences)
+					h.sendTelegramMessage(chatID, fmt.Sprintf("Godzina %s jest już wybrana.", formatPreference(pref)), newMenu)
+				} else {
+					session.SelectedPreferences = append(session.SelectedPreferences, pref)
+					newMenu := h.buildScheduleKeyboard(session.SelectedPreferences)
+					h.sendTelegramMessage(chatID, fmt.Sprintf("Dodano godzinę: %s", formatPreference(pref)), newMenu)
+				}
+			} else if matches := reMorning.FindStringSubmatch(textUpper); len(matches) > 1 {
+				pref := fmt.Sprintf("morning_%s", matches[1])
+
+				alreadyHas := false
+				for _, p := range session.SelectedPreferences {
+					if p == pref {
+						alreadyHas = true
+						break
+					}
+				}
+
+				if alreadyHas {
+					newMenu := h.buildScheduleKeyboard(session.SelectedPreferences)
+					h.sendTelegramMessage(chatID, fmt.Sprintf("Godzina %s jest już wybrana.", formatPreference(pref)), newMenu)
+				} else {
+					session.SelectedPreferences = append(session.SelectedPreferences, pref)
+					newMenu := h.buildScheduleKeyboard(session.SelectedPreferences)
+					h.sendTelegramMessage(chatID, fmt.Sprintf("Dodano godzinę: %s", formatPreference(pref)), newMenu)
+				}
+			} else {
+				h.sendTelegramMessage(chatID, messages.AwaitingScheduleReminder)
+			}
 		default:
 			h.sendTelegramMessage(chatID, messages.UnknownCommand)
 		}
@@ -456,6 +491,20 @@ func (h *TelegramHandler) buildScheduleKeyboard(selected []string) *model.Telegr
 		{"morning_10", messages.OptMorning10},
 	}
 
+	// Add custom options to the menu so the user can uncheck them
+	for _, p := range selected {
+		found := false
+		for _, o := range options {
+			if o.Key == p {
+				found = true
+				break
+			}
+		}
+		if !found {
+			options = append(options, struct{ Key, Text string }{p, formatPreference(p)})
+		}
+	}
+
 	var keyboard [][]model.TelegramInlineButton
 	for _, opt := range options {
 		has := false
@@ -489,4 +538,28 @@ func (h *TelegramHandler) buildScheduleKeyboard(selected []string) *model.Telegr
 	return &model.TelegramInlineMenu{
 		InlineKeyboard: keyboard,
 	}
+}
+
+func formatPreference(p string) string {
+	optionsMap := map[string]string{
+		"day_before_19": messages.OptDayBefore19,
+		"day_before_20": messages.OptDayBefore20,
+		"day_before_21": messages.OptDayBefore21,
+		"morning_7":     messages.OptMorning7,
+		"morning_8":     messages.OptMorning8,
+		"morning_9":     messages.OptMorning9,
+		"morning_10":    messages.OptMorning10,
+	}
+	if val, ok := optionsMap[p]; ok {
+		return val
+	}
+	if strings.HasPrefix(p, "day_before_") {
+		hour := strings.TrimPrefix(p, "day_before_")
+		return fmt.Sprintf("Dzień wcześniej o %s:00", hour)
+	}
+	if strings.HasPrefix(p, "morning_") {
+		hour := strings.TrimPrefix(p, "morning_")
+		return fmt.Sprintf("W dniu wywozu o %s:00", hour)
+	}
+	return p
 }

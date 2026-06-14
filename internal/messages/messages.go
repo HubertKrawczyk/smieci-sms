@@ -11,7 +11,7 @@ const (
 	MultipleLocationsPrompt      = "Znaleziono wiele lokalizacji. Wybierz odpowiednią z poniższej listy:"
 	CancelButtonLabel            = "❌ Żadna z powyższych"
 	SelectedLocationEdit         = "Wybrana lokalizacja: %s"
-	SchedulePrompt               = "Kiedy chcesz otrzymywać powiadomienia? Wybierz wszystkie pasujące opcje, a następnie kliknij Zapisz i zarejestruj poniżej:"
+	SchedulePrompt               = "Kiedy chcesz otrzymywać powiadomienia? Wybierz z poniższej listy lub wpisz własną godzinę (np. '6' lub '6:00' dla powiadomienia o 6 rano w dniu wywozu, 'W 15' dla powiadomienia dzień wcześniej o 15:00):"
 	DoneButtonLabel              = "💾 Zapisz i zarejestruj"
 	SaveError                    = "Coś poszło nie tak podczas zapisywania Twojej lokalizacji i preferencji. Wpisz /start, aby spróbować ponownie."
 	ConfirmationWithPreferences  = "Wybór lokalizacji potwierdzony (%s)! Rejestracja przebiegła pomyślnie. Będziesz otrzymywać powiadomienia o godzinach: %s.\n\nTwój harmonogram wywozu będzie odświeżany automatycznie z serwerów miasta co 3 dni.\n\nDostępne komendy:\n/harmonogram - Sprawdź wywozy\n/anuluj - Usuń dane\n/start - Rejestracja od nowa"
