@@ -13,7 +13,7 @@ const (
 	ErrorFindLocation            = "Wystąpił błąd podczas wyszukiwania identyfikatora lokalizacji."
 	RegistrationCanceled         = "Rejestracja została anulowana. Wpisz /start, aby spróbować ponownie."
 	SomethingWentWrong           = "Przepraszamy, coś poszło nie tak. Wpisz /start, aby rozpocząć proces rejestracji od nowa."
-	UnknownCommand               = "Nie rozumiem tej komendy lub wiadomości. Dostępne komendy:\n/start - Rozpocznij rejestrację\n/harmonogram - Sprawdź najbliższe wywozy\n/prywatnosc - Polityka prywatności\n/anuluj - Usuń swoje dane"
+	UnknownCommand               = "Nie rozumiem tej komendy lub wiadomości. Dostępne komendy:\n/start - Rozpocznij rejestrację\n/harmonogram - Sprawdź najbliższe wywozy\n/edytuj_harmonogram - Edytuj preferencje powiadomień\n/prywatnosc - Polityka prywatności\n/anuluj - Usuń swoje dane"
 	MultipleLocationsPrompt      = "Znaleziono wiele lokalizacji. Wybierz odpowiednią z poniższej listy:"
 	CancelButtonLabel            = "❌ Żadna z powyższych"
 	SelectedLocationEdit         = "Wybrana lokalizacja: %s"

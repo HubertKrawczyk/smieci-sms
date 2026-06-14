@@ -58,7 +58,7 @@ func TestTelegramHandler_AnulujCommand(t *testing.T) {
 
 	// Add a session beforehand to verify it gets deleted
 	chatID := int64(987654321)
-	session := getSession(chatID)
+	session := getOrCreateSession(chatID)
 	session.State = StateAwaitingStreet
 	session.Street = "Testowa"
 
@@ -122,7 +122,7 @@ func TestTelegramHandler_AnulujCommand(t *testing.T) {
 	}
 
 	// Double check that getting a new session starts with StateNone
-	newSess := getSession(chatID)
+	newSess := getOrCreateSession(chatID)
 	if newSess.State != StateNone {
 		t.Errorf("expected new session state to be StateNone, got %v", newSess.State)
 	}

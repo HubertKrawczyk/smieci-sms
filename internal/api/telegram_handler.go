@@ -54,7 +54,7 @@ var (
 	sessions     = make(map[int64]*UserSession)
 )
 
-func getSession(chatID int64) *UserSession {
+func getOrCreateSession(chatID int64) *UserSession {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	if _, exists := sessions[chatID]; !exists { // create new session if not exists
@@ -116,7 +116,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 	if payload.CallbackQuery != nil {
 		cb := payload.CallbackQuery
 		chatID := cb.Message.Chat.ID
-		session := getSession(chatID)
+		session := getOrCreateSession(chatID)
 
 		if session.State == StateAwaitingLocationConfirmation {
 			// Acknowledge click immediately to clear loading icon on user screen
@@ -279,11 +279,11 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 			h.sendTelegramMessage(chatID, messages.HarmonogramPending)
 		} else {
 			var sb strings.Builder
-			
+
 			if schedule.User.AddressName != "" {
 				sb.WriteString(fmt.Sprintf("📍 Adres: %s\n", schedule.User.AddressName))
 			}
-			
+
 			if len(schedule.User.NotificationSettings) > 0 {
 				var prefsStr []string
 				for _, p := range schedule.User.NotificationSettings {
@@ -293,7 +293,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 			} else {
 				sb.WriteString("🔔 Powiadomienia: Brak\n\n")
 			}
-			
+
 			if !schedule.Schedule.LastUpdate.IsZero() {
 				sb.WriteString(fmt.Sprintf(messages.HarmonogramHeaderDate, schedule.Schedule.LastUpdate.Format("2006-01-02 15:04")))
 			} else {
@@ -347,12 +347,39 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if payload.Message != nil && payload.Message.Text == "/edytuj_harmonogram" {
+		chatID := payload.Message.Chat.ID
+		log.Printf("User on Chat ID %d wants to edit schedule via /edytuj_harmonogram", chatID)
+
+		schedule, err := h.repo.GetUserScheduleByChatID(r.Context(), chatID)
+		if err != nil {
+			h.sendTelegramMessage(chatID, messages.HarmonogramError)
+		} else if schedule == nil {
+			h.sendTelegramMessage(chatID, messages.HarmonogramNotRegistered)
+		} else {
+			session := getOrCreateSession(chatID)
+			session.State = StateAwaitingSchedule
+			session.LocationID = schedule.User.LocationID
+			session.LocationName = schedule.User.AddressName
+			// Make a copy of preferences to avoid accidental shared slice modification
+			session.SelectedPreferences = append([]string{}, schedule.User.NotificationSettings...)
+
+			keyboard := h.buildScheduleKeyboard(session.SelectedPreferences)
+			h.sendTelegramMessage(chatID, messages.SchedulePrompt, keyboard)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
 	if payload.Message != nil && (payload.Message.Text == "/prywatnosc" || payload.Message.Text == "/privacy") {
 		chatID := payload.Message.Chat.ID
 		log.Printf("User on Chat ID %d requested privacy policy", chatID)
-		
+
 		h.sendTelegramMessage(chatID, messages.PrivacyPolicy)
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -363,7 +390,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 		chatID := payload.Message.Chat.ID
 		fmt.Printf("User on Chat ID %d wants to START the process!\n", chatID)
 
-		session := getSession(chatID)
+		session := getOrCreateSession(chatID)
 		session.State = StateAwaitingStreet
 		h.sendTelegramMessage(chatID, messages.Welcome)
 
@@ -374,7 +401,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 	}
 	if payload.Message != nil {
 		chatID := payload.Message.Chat.ID
-		session := getSession(chatID)
+		session := getOrCreateSession(chatID)
 		text := payload.Message.Text
 
 		switch session.State {
@@ -440,7 +467,7 @@ func (h *TelegramHandler) Start(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				pref := fmt.Sprintf("day_before_%s", matches[1])
-				
+
 				alreadyHas := false
 				for _, p := range session.SelectedPreferences {
 					if p == pref {
